@@ -25,14 +25,6 @@ st.markdown("""
         font-family: 'Outfit', sans-serif;
     }
 
-    .ip-dot {
-        font-size: 22px;
-        font-weight: 700;
-        text-align: center;
-        margin-top: 6px;
-        color: #ea580c;
-    }
-
     .stButton>button {
         border-radius: 10px;
         font-weight: 600;
@@ -87,36 +79,21 @@ with st.sidebar:
     llm_config = {}
 
     if ai_mode == "Local AI":
-        st.caption("LM Studio Local Server Setup")
+        st.caption("LM Studio / Ngrok Tunnel Connection")
         
-        col_proto, col_port = st.columns([1, 1])
-        with col_proto:
-            protocol = st.text_input("Protocol", value="http", key="f_proto")
-        with col_port:
-            port = st.text_input("Port", value="1234", key="f_port")
+        tunnel_url = st.text_input(
+            "Server / Tunnel URL",
+            value="",
+            placeholder="https://xxxx-xx-xx.ngrok-free.app",
+            help="Enter your ngrok forwarding URL or local server address."
+        )
 
-        st.markdown("<p style='font-size: 13px; font-weight: 600; margin-bottom: 2px; color: #475569;'>Server IP Address</p>", unsafe_allow_html=True)
-        
-        ip1, d1, ip2, d2, ip3, d3, ip4 = st.columns([2, 0.4, 2, 0.4, 2, 0.4, 2])
-        with ip1:
-            octet1 = st.text_input("IP 1", value="192", label_visibility="collapsed", key="f_ip1")
-        with d1:
-            st.markdown("<div class='ip-dot'>.</div>", unsafe_allow_html=True)
-        with ip2:
-            octet2 = st.text_input("IP 2", value="168", label_visibility="collapsed", key="f_ip2")
-        with d2:
-            st.markdown("<div class='ip-dot'>.</div>", unsafe_allow_html=True)
-        with ip3:
-            octet3 = st.text_input("IP 3", value="1", label_visibility="collapsed", key="f_ip3")
-        with d3:
-            st.markdown("<div class='ip-dot'>.</div>", unsafe_allow_html=True)
-        with ip4:
-            octet4 = st.text_input("IP 4", value="8", label_visibility="collapsed", key="f_ip4")
+        clean_url = tunnel_url.strip().rstrip("/")
+        if clean_url and not clean_url.endswith("/v1"):
+            clean_url = f"{clean_url}/v1"
 
-        full_base_url = f"{protocol}://{octet1.strip()}.{octet2.strip()}.{octet3.strip()}.{octet4.strip()}:{port.strip()}/v1"
-        llm_config["base_url"] = full_base_url
-
-        st.markdown(f"<div style='font-size:12px; color:#64748b; margin: 8px 0;'>Target: <code>{full_base_url}</code></div>", unsafe_allow_html=True)
+        llm_config["base_url"] = clean_url if clean_url else "http://127.0.0.1:1234/v1"
+        st.markdown(f"<div style='font-size:12px; color:#64748b; margin: 8px 0;'>Target: <code>{llm_config['base_url']}</code></div>", unsafe_allow_html=True)
 
     else:
         st.caption("Cloud Engine (Groq: `openai/gpt-oss-20b`)")
@@ -302,10 +279,8 @@ with tabs[2]:
                 
                 df_filtered = df_raw[df_raw["Student Name"] == sel_student]
                 
-                # If wide format (dates as columns)
                 if date_cols:
                     st.dataframe(df_filtered, use_container_width=True)
-                    # Summary metrics
                     row = df_filtered.iloc[0]
                     p_dates = [d for d in date_cols if str(row[d]).strip().upper() in ["P", "PRESENT"]]
                     a_dates = [d for d in date_cols if str(row[d]).strip().upper() in ["A", "ABSENT"]]
@@ -329,7 +304,6 @@ with tabs[2]:
 
                     st.dataframe(df_day, use_container_width=True)
                 else:
-                    # Long format table
                     dates_avail = df_raw["Date"].astype(str).unique().tolist()
                     sel_date = st.selectbox("Select Date", dates_avail)
                     df_day = df_raw[df_raw["Date"].astype(str) == sel_date]
