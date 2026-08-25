@@ -61,13 +61,15 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize Session State Variables
+# Initialize Session State
 if "llm_connected" not in st.session_state:
     st.session_state.llm_connected = False
 if "conn_message" not in st.session_state:
     st.session_state.conn_message = ""
 if "active_provider" not in st.session_state:
     st.session_state.active_provider = ""
+if "connected_config" not in st.session_state:
+    st.session_state.connected_config = {}
 
 # =============================================================
 # SIDEBAR
@@ -81,6 +83,7 @@ with st.sidebar:
     def on_mode_change():
         st.session_state.llm_connected = False
         st.session_state.conn_message = ""
+        st.session_state.connected_config = {}
 
     ai_mode = st.radio(
         "Provider Mode", 
@@ -90,7 +93,7 @@ with st.sidebar:
         on_change=on_mode_change
     )
 
-    llm_config = {}
+    current_config = {}
 
     if ai_mode == "System Default":
         st.caption("Pre-configured Cloud Engine (`openai/gpt-oss-20b`)")
@@ -101,16 +104,16 @@ with st.sidebar:
         except Exception:
             system_key = os.getenv("GROQ_API_KEY", "")
 
-        llm_config["api_key"] = system_key
+        current_config["api_key"] = system_key
         if system_key:
             st.info("🔒 Ready to connect with secure system key.")
         else:
-            st.warning("⚠️ No GROQ_API_KEY detected in secrets.")
+            st.warning("⚠️ No GROQ_API_KEY found in secrets.")
 
     elif ai_mode == "Cloud":
         st.caption("Cloud Engine (Groq: `openai/gpt-oss-20b`)")
         user_key = st.text_input("Grok_Api_Key", type="password", placeholder="gsk_...", key="custom_grok_key")
-        llm_config["api_key"] = user_key.strip()
+        current_config["api_key"] = user_key.strip()
 
     elif ai_mode == "Local":
         st.caption("LM Studio / Ngrok Tunnel Connection")
@@ -125,27 +128,28 @@ with st.sidebar:
         if clean_url and not clean_url.endswith("/v1"):
             clean_url = f"{clean_url}/v1"
 
-        llm_config["base_url"] = clean_url if clean_url else "http://127.0.0.1:1234/v1"
-        st.markdown(f"<div style='font-size:12px; color:#64748b; margin: 8px 0;'>Target: <code>{llm_config['base_url']}</code></div>", unsafe_allow_html=True)
+        current_config["base_url"] = clean_url if clean_url else "http://127.0.0.1:1234/v1"
+        st.markdown(f"<div style='font-size:12px; color:#64748b; margin: 8px 0;'>Target: <code>{current_config['base_url']}</code></div>", unsafe_allow_html=True)
 
     temperature = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.0, step=0.1)
-    llm_config["temperature"] = temperature
+    current_config["temperature"] = temperature
 
-    # Connection Trigger
+    # Connect Action
     if st.button("🔌 Connect to LLM", use_container_width=True):
-        if (ai_mode in ["System Default", "Cloud"]) and not llm_config.get("api_key"):
+        if (ai_mode in ["System Default", "Cloud"]) and not current_config.get("api_key"):
             st.session_state.llm_connected = False
             st.session_state.conn_message = "Connection Failed: No API Key provided."
         else:
             start_t = time.perf_counter()
             with st.spinner("Connecting..."):
-                success, msg = test_connection(ai_mode, llm_config)
+                success, msg = test_connection(ai_mode, current_config)
                 elapsed = time.perf_counter() - start_t
                 st.session_state.llm_connected = success
                 st.session_state.active_provider = ai_mode
+                st.session_state.connected_config = current_config.copy()
                 st.session_state.conn_message = f"{msg} ({elapsed:.2f}s)"
 
-    # Live Status Display
+    # Status Display
     if st.session_state.llm_connected:
         st.success(f"🟢 {st.session_state.conn_message}")
     elif st.session_state.conn_message:
@@ -204,7 +208,9 @@ with tabs[0]:
                 with st.spinner("Processing request..."):
                     start_time = time.perf_counter()
                     try:
-                        response = handle_query(user_query, provider=ai_mode, config=llm_config)
+                        active_p = st.session_state.active_provider
+                        active_cfg = st.session_state.connected_config
+                        response = handle_query(user_query, provider=active_p, config=active_cfg)
                         elapsed_time = time.perf_counter() - start_time
                         st.markdown(response)
                         st.markdown(f"<div class='time-badge'>⏱️ Response Time: {elapsed_time:.2f}s</div>", unsafe_allow_html=True)
@@ -245,8 +251,10 @@ with tabs[1]:
         else:
             start_time = time.perf_counter()
             with st.spinner("Generating student report card and WhatsApp drafts..."):
-                profile_report = handle_query(f"Show full report for {student_choice}", provider=ai_mode, config=llm_config)
-                whatsapp_draft = handle_query(f"Draft a WhatsApp monthly progress report for {student_choice}", provider=ai_mode, config=llm_config)
+                active_p = st.session_state.active_provider
+                active_cfg = st.session_state.connected_config
+                profile_report = handle_query(f"Show full report for {student_choice}", provider=active_p, config=active_cfg)
+                whatsapp_draft = handle_query(f"Draft a WhatsApp monthly progress report for {student_choice}", provider=active_p, config=active_cfg)
                 elapsed_time = time.perf_counter() - start_time
 
                 st.divider()
