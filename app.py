@@ -61,10 +61,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Initialize Session State Variables
 if "llm_connected" not in st.session_state:
     st.session_state.llm_connected = False
 if "conn_message" not in st.session_state:
     st.session_state.conn_message = ""
+if "active_provider" not in st.session_state:
+    st.session_state.active_provider = ""
 
 # =============================================================
 # SIDEBAR
@@ -74,13 +77,43 @@ with st.sidebar:
         st.image(LOGO_PATH, width=120)
     
     st.markdown("### ⚙️ System Engine")
-    ai_mode = st.radio("Provider Mode", ["Local AI", "Cloud AI"], index=0)
+    
+    def on_mode_change():
+        st.session_state.llm_connected = False
+        st.session_state.conn_message = ""
+
+    ai_mode = st.radio(
+        "Provider Mode", 
+        ["System Default", "Cloud", "Local"], 
+        index=0, 
+        key="provider_selection",
+        on_change=on_mode_change
+    )
 
     llm_config = {}
 
-    if ai_mode == "Local AI":
+    if ai_mode == "System Default":
+        st.caption("Pre-configured Cloud Engine (`openai/gpt-oss-20b`)")
+        system_key = ""
+        try:
+            if hasattr(st, "secrets") and "GROQ_API_KEY" in st.secrets:
+                system_key = st.secrets["GROQ_API_KEY"]
+        except Exception:
+            system_key = os.getenv("GROQ_API_KEY", "")
+
+        llm_config["api_key"] = system_key
+        if system_key:
+            st.info("🔒 Ready to connect with secure system key.")
+        else:
+            st.warning("⚠️ No GROQ_API_KEY detected in secrets.")
+
+    elif ai_mode == "Cloud":
+        st.caption("Cloud Engine (Groq: `openai/gpt-oss-20b`)")
+        user_key = st.text_input("Grok_Api_Key", type="password", placeholder="gsk_...", key="custom_grok_key")
+        llm_config["api_key"] = user_key.strip()
+
+    elif ai_mode == "Local":
         st.caption("LM Studio / Ngrok Tunnel Connection")
-        
         tunnel_url = st.text_input(
             "Server / Tunnel URL",
             value="",
@@ -95,28 +128,30 @@ with st.sidebar:
         llm_config["base_url"] = clean_url if clean_url else "http://127.0.0.1:1234/v1"
         st.markdown(f"<div style='font-size:12px; color:#64748b; margin: 8px 0;'>Target: <code>{llm_config['base_url']}</code></div>", unsafe_allow_html=True)
 
-    else:
-        st.caption("Cloud Engine (Groq: `openai/gpt-oss-20b`)")
-        grok_key = st.text_input("Grok_Api_Key", type="password", placeholder="gsk_...", key="grok_key")
-        llm_config["api_key"] = grok_key
-
     temperature = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.0, step=0.1)
     llm_config["temperature"] = temperature
 
+    # Connection Trigger
     if st.button("🔌 Connect to LLM", use_container_width=True):
-        start_t = time.perf_counter()
-        with st.spinner("Connecting..."):
-            success, msg = test_connection(ai_mode, llm_config)
-            elapsed = time.perf_counter() - start_t
-            st.session_state.llm_connected = success
-            st.session_state.conn_message = f"{msg} ({elapsed:.2f}s)"
+        if (ai_mode in ["System Default", "Cloud"]) and not llm_config.get("api_key"):
+            st.session_state.llm_connected = False
+            st.session_state.conn_message = "Connection Failed: No API Key provided."
+        else:
+            start_t = time.perf_counter()
+            with st.spinner("Connecting..."):
+                success, msg = test_connection(ai_mode, llm_config)
+                elapsed = time.perf_counter() - start_t
+                st.session_state.llm_connected = success
+                st.session_state.active_provider = ai_mode
+                st.session_state.conn_message = f"{msg} ({elapsed:.2f}s)"
 
+    # Live Status Display
     if st.session_state.llm_connected:
         st.success(f"🟢 {st.session_state.conn_message}")
     elif st.session_state.conn_message:
         st.error(f"🔴 {st.session_state.conn_message}")
     else:
-        st.info("⚪ Ready to connect. Click above.")
+        st.info("⚪ Not Connected. Click 'Connect to LLM' to start.")
 
 # =============================================================
 # HEADER
@@ -158,8 +193,8 @@ with tabs[0]:
 
     user_query = st.chat_input("Ask anything (e.g. 'Who has pending fees in Class 10?', 'Draft WhatsApp fee reminder for RV-X-102')...")
     if user_query:
-        if ai_mode == "Cloud AI" and not llm_config.get("api_key"):
-            st.error("Please provide your Grok_Api_Key in the sidebar.")
+        if not st.session_state.llm_connected:
+            st.error("⚠️ Please click **'🔌 Connect to LLM'** in the sidebar before making queries.")
         else:
             st.session_state.messages.append({"role": "user", "content": user_query})
             with st.chat_message("user"):
@@ -205,8 +240,8 @@ with tabs[1]:
         generate_btn = st.button("Generate Full Report", use_container_width=True)
 
     if student_choice and generate_btn:
-        if ai_mode == "Cloud AI" and not llm_config.get("api_key"):
-            st.error("Please enter your Grok_Api_Key in the sidebar.")
+        if not st.session_state.llm_connected:
+            st.error("⚠️ Please click **'🔌 Connect to LLM'** in the sidebar before generating reports.")
         else:
             start_time = time.perf_counter()
             with st.spinner("Generating student report card and WhatsApp drafts..."):
