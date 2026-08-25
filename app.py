@@ -104,7 +104,7 @@ with st.sidebar:
         except Exception:
             system_key = os.getenv("GROQ_API_KEY", "")
 
-        current_config["api_key"] = system_key.strip()
+        current_config["api_key"] = system_key
         if system_key:
             st.info("🔒 Ready to connect with secure system key.")
         else:
@@ -128,14 +128,13 @@ with st.sidebar:
         if clean_url and not clean_url.endswith("/v1"):
             clean_url = f"{clean_url}/v1"
 
-        # Explicitly set base_url without any api_key attached
         current_config["base_url"] = clean_url if clean_url else "http://127.0.0.1:1234/v1"
         st.markdown(f"<div style='font-size:12px; color:#64748b; margin: 8px 0;'>Target: <code>{current_config['base_url']}</code></div>", unsafe_allow_html=True)
 
     temperature = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.0, step=0.1)
     current_config["temperature"] = temperature
 
-    # Connection Trigger Button
+    # Connect Action
     if st.button("🔌 Connect to LLM", use_container_width=True):
         if (ai_mode in ["System Default", "Cloud"]) and not current_config.get("api_key"):
             st.session_state.llm_connected = False
@@ -150,7 +149,7 @@ with st.sidebar:
                 st.session_state.connected_config = current_config.copy()
                 st.session_state.conn_message = f"{msg} ({elapsed:.2f}s)"
 
-    # Live Status Indicator
+    # Status Display
     if st.session_state.llm_connected:
         st.success(f"🟢 {st.session_state.conn_message}")
     elif st.session_state.conn_message:
@@ -373,7 +372,7 @@ with tabs[2]:
                     df_filtered = df_raw[df_raw["Subject"] == sel_subj]
                     st.dataframe(df_filtered, use_container_width=True)
                 else:
-                    st.dataframe(df_filtered, use_container_width=True)
+                    st.dataframe(df_raw, use_container_width=True)
             else:
                 st.dataframe(df_raw, use_container_width=True)
 
